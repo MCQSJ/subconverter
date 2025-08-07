@@ -720,10 +720,7 @@ proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGroupCo
         string_array filtered_nodelist;
 
         singlegroup["name"] = x.Name;
-        if (x.Type == ProxyGroupType::Smart)
-            singlegroup["type"] = "url-test";
-        else
-            singlegroup["type"] = x.TypeStr();
+        singlegroup["type"] = x.TypeStr();
 
         switch (x.Type) {
             case ProxyGroupType::Select:
@@ -733,6 +730,10 @@ proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGroupCo
                 singlegroup["strategy"] = x.StrategyStr();
                 [[fallthrough]];
             case ProxyGroupType::Smart:
+                if (x.Type == ProxyGroupType::Smart) {
+                    if (!x.Lazy.is_undef())
+                        singlegroup["lazy"] = x.Lazy.get();
+                }
                 [[fallthrough]];
             case ProxyGroupType::URLTest:
                 if (!x.Lazy.is_undef())
@@ -1868,27 +1869,24 @@ void proxyToQuanX(std::vector<Proxy> &nodes, INIReader &ini, std::vector<Ruleset
     ini.erase_section();
 
     for (const ProxyGroupConfig &x: extra_proxy_group) {
-        std::string type;
         string_array filtered_nodelist;
-
+        std::string type;
         switch (x.Type) {
-            case ProxyGroupType::Select:
-                type = "static";
+            case ProxyGroupType::Select: {
+                type = "selector";
                 break;
+            }
             case ProxyGroupType::URLTest:
-                type = "url-latency-benchmark";
-                break;
             case ProxyGroupType::Fallback:
-                type = "available";
+            case ProxyGroupType::LoadBalance: {
+                type = "urltest";
                 break;
-            case ProxyGroupType::LoadBalance:
-                type = "round-robin";
+            }
+            case ProxyGroupType::Smart: {
+                // 对于sing-box配置，将smart类型映射为urltest类型
+                type = "urltest";
                 break;
-            case ProxyGroupType::SSID:
-                type = "ssid";
-                for (const auto &proxy: x.Proxies)
-                    filtered_nodelist.emplace_back(replaceAllDistinct(proxy, "=", ":"));
-                break;
+            }
             default:
                 continue;
         }
@@ -1910,6 +1908,20 @@ void proxyToQuanX(std::vector<Proxy> &nodes, INIReader &ini, std::vector<Ruleset
                                      std::string::size_type cpos = groupdata.find(',');
                                      if (cpos != std::string::npos)
                                          return trim(groupdata.substr(0, cpos)) == x.Name;
+                                     return trim(groupdata) == x.Name;
+                                 });
+
+        if (iter != original_groups.end()) {
+            std::string groupdata = iter->second;
+            std::string::size_type cpos = groupdata.find(',');
+            if (cpos != std::string::npos)
+                groupdata = groupdata.substr(cpos + 1);
+
+            if (groupdata.empty())
+                groupdata = "direct";
+
+            filtered_nodelist.emplace_back(groupdata);
+        }
                                      else
                                          return false;
                                  });

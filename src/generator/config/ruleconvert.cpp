@@ -17,7 +17,8 @@ string_array Surge2RuleTypes = {basic_types, "IP-CIDR6", "USER-AGENT", "URL-REGE
 string_array SurgeRuleTypes = {basic_types, "IP-CIDR6", "USER-AGENT", "URL-REGEX", "AND", "OR", "NOT", "PROCESS-NAME", "IN-PORT", "DEST-PORT", "SRC-IP"};
 string_array QuanXRuleTypes = {basic_types, "USER-AGENT", "HOST", "HOST-SUFFIX", "HOST-KEYWORD"};
 string_array SurfRuleTypes = {basic_types, "IP-CIDR6", "PROCESS-NAME", "IN-PORT", "DEST-PORT", "SRC-IP"};
-string_array SingBoxRuleTypes = {basic_types, "IP-VERSION", "INBOUND", "PROTOCOL", "NETWORK", "GEOSITE", "SRC-GEOIP", "DOMAIN-REGEX", "PROCESS-NAME", "PROCESS-PATH", "PACKAGE-NAME", "PORT", "PORT-RANGE", "SRC-PORT", "SRC-PORT-RANGE", "USER", "USER-ID"};
+// 更新SingBoxRuleTypes以支持更多规则类型，包括mihomo/clashmate的高级规则
+string_array SingBoxRuleTypes = {basic_types, "IP-CIDR6", "IP-VERSION", "INBOUND", "PROTOCOL", "NETWORK", "GEOSITE", "SRC-GEOIP", "DOMAIN-REGEX", "DOMAIN-WILDCARD", "PROCESS-NAME", "PROCESS-PATH", "PACKAGE-NAME", "PORT", "PORT-RANGE", "SRC-PORT", "SRC-PORT-RANGE", "USER", "USER-ID", "IP-ASN", "SRC-IP-ASN", "DSCP", "UID", "SUB-RULE", "RULE-SET", "AND", "OR", "NOT"};
 
 std::string convertRuleset(const std::string &content, int type)
 {
@@ -179,8 +180,18 @@ void rulesetToClash(YAML::Node &base_rule, std::vector<RulesetContent> &ruleset_
                 strLine.erase(strLine.find("//"));
                 strLine = trimWhitespace(strLine);
             }
-            strLine = transformRuleToCommon(temp, strLine, rule_group);
-            allRules.emplace_back(strLine);
+            //AND & OR & NOT 和 SUB-RULE & RULE-SET 规则不需要添加rule_group
+            if(startsWith(strLine, "AND") || startsWith(strLine, "OR") || startsWith(strLine, "NOT") 
+               || startsWith(strLine, "SUB-RULE") || startsWith(strLine, "RULE-SET"))
+            {
+                allRules.emplace_back(strLine);
+            }
+            else
+            {
+                strLine = transformRuleToCommon(temp, strLine, rule_group);
+                allRules.emplace_back(strLine);
+            }
+            total_rules++;
         }
     }
 
@@ -251,13 +262,9 @@ std::string rulesetToClashStr(YAML::Node &base_rule, std::vector<RulesetContent>
                 strLine = trimWhitespace(strLine);
             }
 
-            //AND & OR & NOT
-            if(startsWith(strLine, "AND") || startsWith(strLine, "OR") || startsWith(strLine, "NOT"))
-            {
-                output_content += "  - " + strLine + "," + rule_group + "\n";
-            }
-            //SUB-RULE & RULE-SET
-            else if (startsWith(strLine, "SUB-RULE") || startsWith(strLine, "RULE-SET"))
+            //AND & OR & NOT 和 SUB-RULE & RULE-SET 规则不需要添加rule_group
+            if(startsWith(strLine, "AND") || startsWith(strLine, "OR") || startsWith(strLine, "NOT") 
+               || startsWith(strLine, "SUB-RULE") || startsWith(strLine, "RULE-SET"))
             {
                 output_content += "  - " + strLine + "\n";
             }
@@ -335,7 +342,9 @@ void rulesetToSurge(INIReader &base_rule, std::vector<RulesetContent> &ruleset_c
             }
             else
             {
-                if(!startsWith(strLine, "AND") && !startsWith(strLine, "OR") && !startsWith(strLine, "NOT"))
+                //AND, OR, NOT, SUB-RULE, RULE-SET规则不需要添加rule_group
+                if(!startsWith(strLine, "AND") && !startsWith(strLine, "OR") && !startsWith(strLine, "NOT") 
+                   && !startsWith(strLine, "SUB-RULE") && !startsWith(strLine, "RULE-SET"))
                     strLine = transformRuleToCommon(temp, strLine, rule_group);
             }
             strLine = replaceAllDistinct(strLine, ",,", ",");
